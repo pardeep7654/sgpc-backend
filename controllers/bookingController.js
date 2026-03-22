@@ -13,18 +13,22 @@ export const getAvailabily = async (req, res) => {
     //booking for the
     const bookings = await Booking.find({
       gurudwara: gurudwaraId,
-      checkInDate: selectedDate,
+      bookingStatus: { $in: ["confirmed", "checked-in"] },
+      $or: [
+        {
+          checkInDate: { $lte: selectedDate },
+          checkOutDate: { $gt: selectedDate },
+        },
+      ],
     }).select("room");
     const bookedRoomIds = bookings.map((booking) => booking.room.toString());
     const availableRooms = allRooms.filter(
       (room) => !bookedRoomIds.includes(room._id.toString()),
     );
-    res
-      .status(200)
-      .json({
-        availableRooms: availableRooms.length,
-        allRooms: allRooms.length,
-      });
+    res.status(200).json({
+      availableRooms: availableRooms.length,
+      allRooms: allRooms.length,
+    });
   } catch (error) {
     console.error("Error fetching availability:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -33,22 +37,25 @@ export const getAvailabily = async (req, res) => {
 
 export const createBooking = async (req, res) => {
   try {
-    const { gurudwaraId, members, checkInDate } = req.body;
+    const { gurudwaraId, members, checkInDate, checkOutDate } = req.body;
     const userId = req.user._id;
     const selectedDate = new Date(checkInDate);
+    if (new Date(checkOutDate) <= new Date(checkInDate)) {
+      return res.status(400).json({
+        message: "Check-out must be after check-in",
+      });
+    }
     //prevent double booking for the same date
     const existingBooking = await Booking.findOne({
       user: userId,
       gurudwara: gurudwaraId,
+
       checkInDate: selectedDate,
     });
     if (existingBooking) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "You already have a booking for this date at this Gurudwara.",
-        });
+      return res.status(400).json({
+        message: "You already have a booking for this date at this Gurudwara.",
+      });
     }
     const existingFamilyBooking = await Booking.findOne({
       checkInDate: selectedDate,
@@ -91,6 +98,7 @@ export const createBooking = async (req, res) => {
       room: roomToBook._id,
       gurudwara: gurudwaraId,
       members,
+      checkOutDate: new Date(checkOutDate),
       checkInDate: selectedDate,
       qrToken,
     });
@@ -111,7 +119,7 @@ export const createGroupBooking = async (req, res) => {
     const roomsNeeded = Math.ceil(groupSize / 4); // assuming 4 capacity
 
     const availableRooms = await Room.find({
-      gurudwara: gurudwaraId
+      gurudwara: gurudwaraId,
     }).limit(roomsNeeded);
 
     if (availableRooms.length < roomsNeeded) {
@@ -129,7 +137,7 @@ export const createGroupBooking = async (req, res) => {
         checkInDate,
         isGroupBooking: true,
         groupName,
-        groupSize
+        groupSize,
       });
 
       bookings.push(booking);
@@ -137,9 +145,8 @@ export const createGroupBooking = async (req, res) => {
 
     res.status(201).json({
       message: "Group Booking Successful",
-      roomsAllocated: bookings.length
+      roomsAllocated: bookings.length,
     });
-
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -159,6 +166,7 @@ export const checkInBooking = async (req, res) => {
       return res.status(400).json({ message: "Booking already checked in" });
     }
     booking.bookingStatus = "checked-in";
+
     await booking.save();
     res.status(200).json({ message: "Check-in successful", booking });
   } catch (error) {
@@ -211,6 +219,37 @@ export const getOccupancyDetails = async (req, res) => {
       availableRooms: totalRooms - bookedToday,
       checkedInToday,
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const checkOutBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    const booking = await Booking.findById(bookingId).populate("room");
+
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    if (booking.bookingStatus !== "checked-in") {
+      return res.status(400).json({
+        message: "Cannot checkout before check-in"
+      });
+    }
+
+    booking.bookingStatus = "checked-out";
+    booking.actualCheckOutTime = new Date();
+
+    await booking.save();
+
+    res.json({
+      message: "Checkout successful",
+      room: booking.room.roomNumber
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

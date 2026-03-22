@@ -31,9 +31,15 @@ const bookingSchema = new Schema(
       type: Date,
       required: true,
     },
+    checkOutDate:{
+      type:Date,
+      required:true
+    },
+    actualCheckOutTime:Date,
+
     bookingStatus: {
       type: String,
-      enum: ["confirmed", "cancelled", "checked-in"],
+      enum: ["confirmed", "cancelled","checked-out","checked-in"],
       default: "confirmed",
     },
     checkInStatus: {
