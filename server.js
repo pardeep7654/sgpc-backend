@@ -11,6 +11,7 @@ import bookingRoutes from "./routes/bookingRoutes.js";
 import cronjobs from "./utils/cronjobs.js";
 import { authMiddleware } from "./middlewares/authMiddleware.js";
 import { adminOnly } from "./middlewares/adminMiddleware.js";
+import { Booking } from "./models/BookingModel.js";
 
 config({
     path: "./.env"
@@ -34,7 +35,13 @@ app.use("/api/bookings", bookingRoutes);
 app.get("/revenue",authMiddleware,adminOnly,async(req,res)=>{
      try {
     const { gurudwaraId, date } = req.query;
+    if (!gurudwaraId || !date) {
+      return res.status(400).json({ message: "gurudwaraId and date are required" });
+    }
     const selectedDate = new Date(date);
+    if (Number.isNaN(selectedDate.getTime())) {
+      return res.status(400).json({ message: "Invalid date" });
+    }
 
     const bookings = await Booking.find({
       gurudwara: gurudwaraId,

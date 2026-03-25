@@ -7,10 +7,18 @@ import crypto from "crypto";
 export const getAvailabily = async (req, res) => {
   try {
     const { gurudwaraId, date } = req.query;
-    const selectedDate = new Date(date);
+    if (!gurudwaraId || !date) {
+      return res
+        .status(400)
+        .json({ message: "gurudwaraId and date are required" });
+    }
 
-    const allRooms = await Room.find({ gurudwara: gurudwaraId });
-    //booking for the
+    const selectedDate = new Date(date);
+    if (Number.isNaN(selectedDate.getTime())) {
+      return res.status(400).json({ message: "Invalid date" });
+    }
+
+    const allRooms = await Room.find({ Gurudwara: gurudwaraId });
     const bookings = await Booking.find({
       gurudwara: gurudwaraId,
       bookingStatus: { $in: ["confirmed", "checked-in"] },
@@ -38,8 +46,22 @@ export const getAvailabily = async (req, res) => {
 export const createBooking = async (req, res) => {
   try {
     const { gurudwaraId, members, checkInDate, checkOutDate } = req.body;
+    if (!gurudwaraId || !members || !checkInDate || !checkOutDate) {
+      return res.status(400).json({
+        message: "gurudwaraId, members, checkInDate and checkOutDate are required",
+      });
+    }
+
     const userId = req.user._id;
     const selectedDate = new Date(checkInDate);
+    const selectedCheckOutDate = new Date(checkOutDate);
+    if (
+      Number.isNaN(selectedDate.getTime()) ||
+      Number.isNaN(selectedCheckOutDate.getTime())
+    ) {
+      return res.status(400).json({ message: "Invalid check-in or check-out date" });
+    }
+
     if (new Date(checkOutDate) <= new Date(checkInDate)) {
       return res.status(400).json({
         message: "Check-out must be after check-in",
@@ -58,13 +80,14 @@ export const createBooking = async (req, res) => {
       });
     }
     const existingFamilyBooking = await Booking.findOne({
+      gurudwara: gurudwaraId,
       checkInDate: selectedDate,
       bookingStatus: "confirmed",
     }).populate("user");
 
     if (
       existingFamilyBooking &&
-      existingFamilyBooking.user.idProof === req.user.idProof
+      existingFamilyBooking.user.Adhaar === req.user.Adhaar
     ) {
       return res.status(400).json({
         message: "Family already booked room for this date",
@@ -74,11 +97,16 @@ export const createBooking = async (req, res) => {
     if (!gurudwara) {
       return res.status(404).json({ message: "Gurudwara not found" });
     }
-    const allRooms = await Room.find({ gurudwara: gurudwaraId });
+    const allRooms = await Room.find({ Gurudwara: gurudwaraId });
     const bookings = await Booking.find({
       gurudwara: gurudwaraId,
-      checkInDate: selectedDate,
-      bookingStatus: "confirmed",
+      bookingStatus: { $in: ["confirmed", "checked-in"] },
+      $or: [
+        {
+          checkInDate: { $lt: selectedCheckOutDate },
+          checkOutDate: { $gt: selectedDate },
+        },
+      ],
     }).select("room");
     const bookedRoomIds = bookings.map((booking) => booking.room.toString());
     const availableRooms = allRooms.filter(
@@ -98,7 +126,7 @@ export const createBooking = async (req, res) => {
       room: roomToBook._id,
       gurudwara: gurudwaraId,
       members,
-      checkOutDate: new Date(checkOutDate),
+      checkOutDate: selectedCheckOutDate,
       checkInDate: selectedDate,
       qrToken,
     });
@@ -114,13 +142,54 @@ export const createBooking = async (req, res) => {
 
 export const createGroupBooking = async (req, res) => {
   try {
-    const { gurudwaraId, groupName, groupSize, checkInDate } = req.body;
+    const { gurudwaraId, groupName, groupSize, checkInDate, checkOutDate } = req.body;
+
+    if (!gurudwaraId || !groupName || !groupSize || !checkInDate || !checkOutDate) {
+      return res.status(400).json({
+        message:
+          "gurudwaraId, groupName, groupSize, checkInDate and checkOutDate are required",
+      });
+    }
+
+    const selectedCheckInDate = new Date(checkInDate);
+    const selectedCheckOutDate = new Date(checkOutDate);
+    if (
+      Number.isNaN(selectedCheckInDate.getTime()) ||
+      Number.isNaN(selectedCheckOutDate.getTime())
+    ) {
+      return res.status(400).json({ message: "Invalid check-in or check-out date" });
+    }
+
+    if (selectedCheckOutDate <= selectedCheckInDate) {
+      return res.status(400).json({
+        message: "Check-out must be after check-in",
+      });
+    }
 
     const roomsNeeded = Math.ceil(groupSize / 4); // assuming 4 capacity
 
-    const availableRooms = await Room.find({
+    const allRooms = await Room.find({
+      Gurudwara: gurudwaraId,
+      capacity: { $gte: 1 },
+    });
+
+    const overlappingBookings = await Booking.find({
       gurudwara: gurudwaraId,
-    }).limit(roomsNeeded);
+      bookingStatus: { $in: ["confirmed", "checked-in"] },
+      $or: [
+        {
+          checkInDate: { $lt: selectedCheckOutDate },
+          checkOutDate: { $gt: selectedCheckInDate },
+        },
+      ],
+    }).select("room");
+
+    const bookedRoomIds = new Set(
+      overlappingBookings.map((booking) => booking.room.toString()),
+    );
+    const availableRooms = allRooms
+      .filter((room) => !bookedRoomIds.has(room._id.toString()))
+      .slice(0, roomsNeeded);
 
     if (availableRooms.length < roomsNeeded) {
       return res.status(400).json({ message: "Not enough rooms" });
@@ -128,19 +197,24 @@ export const createGroupBooking = async (req, res) => {
 
     const bookings = [];
 
-    for (let room of availableRooms) {
+    let remainingGuests = groupSize;
+
+    for (const room of availableRooms) {
+      const members = Math.min(room.capacity, remainingGuests);
       const booking = await Booking.create({
         user: req.user._id,
         gurudwara: gurudwaraId,
         room: room._id,
-        members: 4,
-        checkInDate,
+        members,
+        checkInDate: selectedCheckInDate,
+        checkOutDate: selectedCheckOutDate,
         isGroupBooking: true,
         groupName,
         groupSize,
       });
 
       bookings.push(booking);
+      remainingGuests -= members;
     }
 
     res.status(201).json({
@@ -162,10 +236,9 @@ export const checkInBooking = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
-    if (booking.bookingStatus === "checked-in") {
-      return res.status(400).json({ message: "Booking already checked in" });
-    }
     booking.bookingStatus = "checked-in";
+    booking.checkInStatus = true;
+    booking.checkInTime = new Date();
 
     await booking.save();
     res.status(200).json({ message: "Check-in successful", booking });
@@ -200,18 +273,26 @@ export const cancelBooking = async (req, res) => {
 export const getOccupancyDetails = async (req, res) => {
   try {
     const { gurudwaraId } = req.query;
+    if (!gurudwaraId) {
+      return res.status(400).json({ message: "gurudwaraId is required" });
+    }
+
     const today = new Date();
+    const startOfDay = new Date(today);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(today);
+    endOfDay.setHours(23, 59, 59, 999);
 
     const totalRooms = await Room.countDocuments({ Gurudwara: gurudwaraId });
     const bookedToday = await Booking.countDocuments({
       gurudwara: gurudwaraId,
-      checkInDate: today,
-      checkInStatus: "confirmed",
+      checkInDate: { $gte: startOfDay, $lte: endOfDay },
+      bookingStatus: "confirmed",
     });
     const checkedInToday = await Booking.countDocuments({
       gurudwara: gurudwaraId,
-      checkInDate: today,
-      checkInStatus: "confirmed",
+      checkInDate: { $gte: startOfDay, $lte: endOfDay },
+      bookingStatus: "checked-in",
     });
     res.json({
       totalRooms,

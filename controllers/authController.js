@@ -21,13 +21,16 @@ export const registerUser = async (req, res) => {
     if (!name || !mobile || !age || !Adhaar || !password ||!email) {
       return res.status(400).json({ message: "Please fill all fields" });
     }
-    const userExists = await User.findOne({ mobile });
+    const userExists = await User.findOne({
+      $or: [{ mobile }, { email }, { Adhaar }],
+    });
     if (userExists) {
       return res.status(400).json({ message: "User already exists" });
     }
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({
       name,
+      email,
       mobile,
       age,
       Adhaar,
