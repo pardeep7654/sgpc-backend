@@ -4,7 +4,8 @@ import {
   loginUser,
   logoutUser,
    forgotPassword,
-   resetPassword
+   resetPassword,
+   getUser
 } from "../controllers/authController.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 
@@ -15,5 +16,6 @@ router.post("/login", loginUser);
 router.post("/forgot-password/request-otp", forgotPassword);
 router.post("/forgot-password/reset-password", resetPassword);
 router.get("/logout",authMiddleware ,logoutUser);
+router.get("/me",authMiddleware,getUser)
 
 export default router;
