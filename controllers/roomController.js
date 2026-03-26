@@ -1,5 +1,6 @@
 import { Gurudwara } from "../models/GurudwaraModel.js";
 import { Room } from "../models/RoomModel.js";
+import { uploadBufferToCloudinary } from "../utils/cloudinary.js";
 
 //ADD ROOM(Admin only)
 export const addRoom = async (req, res) => {
@@ -9,18 +10,32 @@ export const addRoom = async (req, res) => {
         if (!gurudwara) {
             return res.status(404).json({ message: "Gurudwara not found" });
         }
-        await Gurudwara.findByIdAndUpdate(gurudwaraId, { $inc: { totalRooms: 1 } });
+
+        const imageFiles = req.files || [];
+        const uploadedImages = await Promise.all(
+            imageFiles.map((file) =>
+                uploadBufferToCloudinary(file.buffer, {
+                    folder: "rooms"
+                })
+            )
+        );
+
         const newRoom = new Room({
             Gurudwara: gurudwaraId,
             roomNumber,
             blockName,
             capacity,
-            type
+            type,
+            images: uploadedImages.map((image) => ({
+                url: image.secure_url,
+                public_id: image.public_id
+            }))
         });
         const savedRoom = await newRoom.save();
+        await Gurudwara.findByIdAndUpdate(gurudwaraId, { $inc: { totalRooms: 1 } });
         res.status(201).json(savedRoom);
     } catch (error) {
-        res.status(500).json({ message: "Error adding room", error });
+        res.status(500).json({ message: "Error adding room", error: error.message });
     }
 };
 
