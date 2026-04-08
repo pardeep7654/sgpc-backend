@@ -91,121 +91,531 @@ Protected routes require the cookie:
 - `authMiddleware` checks the JWT cookie
 - `adminOnly` restricts admin routes
 
-## API Routes
+## API Reference
 
 Base URL: `http://localhost:3000`
 
-### Auth
+Type notation used below:
 
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/forgot-password/request-otp`
-- `POST /api/auth/forgot-password/reset-password`
-- `GET /api/auth/logout`
+- `string(ObjectId)` = MongoDB object id string
+- `string(date-time)` = ISO date-time string
+- Nullable column values:
+  - `No` = endpoint expects/returns non-null value
+  - `Yes` = endpoint can return `null`
+  - `Omitted` = field may be absent from JSON
 
-Example register body:
+### Auth Endpoints
 
-```json
-{
-  "name": "Test User",
-  "email": "test@example.com",
-  "mobile": "9876543210",
-  "age": 28,
-  "Adhaar": "123412341234",
-  "password": "secret123"
-}
-```
+#### 1) POST `/api/auth/register`
 
-Example login body:
+Auth: Public
 
-```json
-{
-  "email": "test@example.com",
-  "password": "secret123"
-}
-```
+Request body:
 
-### Gurudwaras
+| Field    | Type   | Required | Nullable | Notes                     |
+| -------- | ------ | -------- | -------- | ------------------------- |
+| name     | string | Yes      | No       | User full name            |
+| email    | string | Yes      | No       | Must be unique            |
+| mobile   | string | Yes      | No       | Must be unique            |
+| age      | number | Yes      | No       | Numeric age               |
+| Adhaar   | string | Yes      | No       | Must be unique            |
+| password | string | Yes      | No       | Plain password in request |
 
-- `POST /api/gurudwaras/create` `admin only`
-- `GET /api/gurudwaras/all`
+Success response (`201`):
 
-Example create body:
+| Field  | Type             | Nullable | Notes                          |
+| ------ | ---------------- | -------- | ------------------------------ |
+| \_id   | string(ObjectId) | No       | Created user id                |
+| name   | string           | No       |                                |
+| mobile | string           | No       |                                |
+| email  | string           | No       |                                |
+| age    | number           | No       |                                |
+| Adhaar | string           | No       |                                |
+| role   | string           | No       | `pilgrim`, `staff`, `admin`    |
+| token  | string           | No       | JWT also set in `token` cookie |
 
-```json
-{
-  "name": "Sri Harmandir Sahib",
-  "location": "Amritsar",
-  "history": "Historic Gurudwara"
-}
-```
+Error responses:
 
-### Rooms
+- `400`: `{ "message": "Please fill all fields" }` or `{ "message": "User already exists" }`
+- `500`: `{ "message": "Server error" }`
 
-- `POST /api/rooms/add` `admin only`
-- `GET /api/rooms/:gurudwaraId`
+#### 2) POST `/api/auth/login`
 
-Example add room body:
+Auth: Public
 
-```json
-{
-  "gurudwaraId": "GURUDWARA_ID",
-  "roomNumber": "101",
-  "blockName": "A",
-  "capacity": 4,
-  "type": "free"
-}
-```
+Request body:
 
-### Bookings
+| Field    | Type   | Required | Nullable | Notes            |
+| -------- | ------ | -------- | -------- | ---------------- |
+| email    | string | Yes      | No       | Registered email |
+| password | string | Yes      | No       | Raw password     |
 
-- `GET /api/bookings/availability?gurudwaraId=...&date=...`
-- `POST /api/bookings/create`
-- `POST /api/bookings/group`
-- `PUT /api/bookings/cancel/:bookingId`
-- `POST /api/bookings/checkin` `admin only`
-- `PUT /api/bookings/checkout/:bookingId` `admin only`
-- `GET /api/bookings/admin/occupancy?gurudwaraId=...` `admin only`
+Success response (`200`):
 
-Example single booking body:
+| Field  | Type             | Nullable | Notes                          |
+| ------ | ---------------- | -------- | ------------------------------ |
+| \_id   | string(ObjectId) | No       |                                |
+| name   | string           | No       |                                |
+| mobile | string           | No       |                                |
+| email  | string           | No       |                                |
+| age    | number           | No       |                                |
+| Adhaar | string           | No       |                                |
+| role   | string           | No       |                                |
+| token  | string           | No       | JWT also set in `token` cookie |
 
-```json
-{
-  "gurudwaraId": "GURUDWARA_ID",
-  "members": 2,
-  "checkInDate": "2026-03-25T00:00:00.000Z",
-  "checkOutDate": "2026-03-26T00:00:00.000Z"
-}
-```
+Error responses:
 
-Example group booking body:
+- `400`: `{ "message": "Please fill all fields" }` or `{ "message": "Invalid credentials" }`
+- `500`: `{ "message": "Server error" }`
 
-```json
-{
-  "gurudwaraId": "GURUDWARA_ID",
-  "groupName": "Delhi Sangat",
-  "groupSize": 10,
-  "checkInDate": "2026-03-25T00:00:00.000Z",
-  "checkOutDate": "2026-03-27T00:00:00.000Z"
-}
-```
+#### 3) POST `/api/auth/forgot-password/request-otp`
 
-Example check-in body:
+Auth: Public
 
-```json
-{
-  "qrToken": "BOOKING_QR_TOKEN"
-}
-```
+Request body:
 
-### Revenue
+| Field | Type   | Required | Nullable | Notes              |
+| ----- | ------ | -------- | -------- | ------------------ |
+| email | string | Yes      | No       | User email for OTP |
 
-- `GET /revenue?gurudwaraId=...&date=...` `admin only`
+Success response (`200`):
 
-This route returns:
+| Field   | Type   | Nullable | Notes                   |
+| ------- | ------ | -------- | ----------------------- |
+| message | string | No       | `OTP sent successfully` |
 
-- total bookings for the selected date
-- total revenue based on paid room bookings
+Error responses:
+
+- `400`: `{ "message": "Email is required" }`
+- `404`: `{ "message": "User not Found" }`
+- `500`: `{ "message": "<runtime error message>" }`
+
+#### 4) POST `/api/auth/forgot-password/reset-password`
+
+Auth: Public
+
+Request body:
+
+| Field       | Type   | Required | Nullable | Notes            |
+| ----------- | ------ | -------- | -------- | ---------------- |
+| email       | string | Yes      | No       |                  |
+| otp         | string | Yes      | No       | 6-digit OTP      |
+| newPassword | string | Yes      | No       | New raw password |
+
+Success response (`200`):
+
+| Field   | Type   | Nullable | Notes                       |
+| ------- | ------ | -------- | --------------------------- |
+| message | string | No       | `Password reset successful` |
+
+Error responses:
+
+- `400`: `{ "message": "Email, OTP and new password are required" }` or `{ "message": "User Not Found Or Invalid Otp" }`
+- `500`: `{ "message": "<runtime error message>" }`
+
+#### 5) GET `/api/auth/logout`
+
+Auth: Required (`token` cookie)
+
+Request body: None
+
+Success response (`200`):
+
+| Field   | Type   | Nullable | Notes                     |
+| ------- | ------ | -------- | ------------------------- |
+| message | string | No       | `Logged out successfully` |
+
+Error responses:
+
+- `401`: `{ "message": "Unauthorized: No token provided" }` or `{ "message": "User already logout" }`
+- `500`: `{ "message": "Server error" }`
+
+#### 6) GET `/api/auth/me`
+
+Auth: Required (`token` cookie)
+
+Request body: None
+
+Success response (`200`):
+
+| Field   | Type    | Nullable | Notes                            |
+| ------- | ------- | -------- | -------------------------------- |
+| success | boolean | No       | Always `true` for success path   |
+| user    | object  | No       | User object from auth middleware |
+
+`user` fields:
+
+| Field      | Type              | Nullable | Notes                      |
+| ---------- | ----------------- | -------- | -------------------------- |
+| \_id       | string(ObjectId)  | No       |                            |
+| name       | string            | No       |                            |
+| email      | string            | No       |                            |
+| mobile     | string            | No       |                            |
+| age        | number            | No       |                            |
+| Adhaar     | string            | No       |                            |
+| role       | string            | No       |                            |
+| otp        | string            | Omitted  | Usually omitted unless set |
+| otpExpires | string(date-time) | Omitted  | Usually omitted unless set |
+| createdAt  | string(date-time) | No       |                            |
+| updatedAt  | string(date-time) | No       |                            |
+| \_\_v      | number            | No       | Mongoose version key       |
+
+Error responses:
+
+- `401`: `{ "message": "Unauthorized: No token provided" }`, `{ "message": "Unauthorized: User not found" }`, or `{ "message": "User already logout" }`
+
+### Gurudwara Endpoints
+
+#### 7) POST `/api/gurudwaras/create`
+
+Auth: Required + Admin only
+
+Request body:
+
+| Field    | Type   | Required | Nullable | Notes             |
+| -------- | ------ | -------- | -------- | ----------------- |
+| name     | string | Yes      | No       | Mongoose required |
+| location | string | Yes      | No       | Mongoose required |
+| history  | string | Yes      | No       | Mongoose required |
+
+Success response (`201`): Gurudwara document
+
+| Field      | Type              | Nullable | Notes       |
+| ---------- | ----------------- | -------- | ----------- |
+| \_id       | string(ObjectId)  | No       |             |
+| name       | string            | No       |             |
+| location   | string            | No       |             |
+| history    | string            | No       |             |
+| totalRooms | number            | No       | Default `0` |
+| createdAt  | string(date-time) | No       |             |
+| updatedAt  | string(date-time) | No       |             |
+| \_\_v      | number            | No       |             |
+
+Error responses:
+
+- `401`: Auth errors
+- `403`: `{ "message": "Forbidden: Admins only" }`
+- `500`: `{ "message": "Error creating Gurudwara", "reqBody": object, "error": string }`
+
+#### 8) GET `/api/gurudwaras/all`
+
+Auth: Public
+
+Request body: None
+
+Success response (`200`): Array of Gurudwara objects with same schema as endpoint 7 response.
+
+Error responses:
+
+- `500`: `{ "message": "Error fetching Gurudwaras", "error": object }`
+
+### Room Endpoints
+
+#### 9) POST `/api/rooms/add`
+
+Auth: Required + Admin only
+
+Content type: `multipart/form-data`
+
+Request form fields:
+
+| Field       | Type             | Required | Nullable | Notes                                              |
+| ----------- | ---------------- | -------- | -------- | -------------------------------------------------- |
+| gurudwaraId | string(ObjectId) | Yes      | No       | Must reference existing gurudwara                  |
+| roomNumber  | string           | Yes      | No       | Mongoose required                                  |
+| blockName   | string           | Yes      | No       | Mongoose required                                  |
+| capacity    | number           | Yes      | No       | Mongoose required                                  |
+| type        | string           | No       | Omitted  | Allowed values: `free`, `paid`; defaults to `free` |
+| images      | file[]           | No       | Omitted  | Up to 5 image files, each <= 5 MB                  |
+
+Success response (`201`): Room document
+
+| Field              | Type              | Nullable | Notes                              |
+| ------------------ | ----------------- | -------- | ---------------------------------- |
+| \_id               | string(ObjectId)  | No       |                                    |
+| Gurudwara          | string(ObjectId)  | No       |                                    |
+| blockName          | string            | No       |                                    |
+| roomNumber         | string            | No       |                                    |
+| images             | array<object>     | No       | Empty array when no image uploaded |
+| images[].url       | string            | Omitted  | Present for uploaded images        |
+| images[].public_id | string            | Omitted  | Present for uploaded images        |
+| capacity           | number            | No       |                                    |
+| type               | string            | No       | `free` or `paid`                   |
+| status             | string            | No       | Defaults to `available`            |
+| createdAt          | string(date-time) | No       |                                    |
+| updatedAt          | string(date-time) | No       |                                    |
+| \_\_v              | number            | No       |                                    |
+
+Error responses:
+
+- `400`: Upload middleware errors, for example `{ "message": "Only image files are allowed" }`
+- `401`: Auth errors
+- `403`: `{ "message": "Forbidden: Admins only" }`
+- `404`: `{ "message": "Gurudwara not found" }`
+- `500`: `{ "message": "Error adding room", "error": string }`
+
+#### 10) GET `/api/rooms/:gurudwaraId`
+
+Auth: Public
+
+Path params:
+
+| Param       | Type             | Required | Nullable | Notes |
+| ----------- | ---------------- | -------- | -------- | ----- |
+| gurudwaraId | string(ObjectId) | Yes      | No       |       |
+
+Request body: None
+
+Success response (`200`): Array of Room objects with same schema as endpoint 9 response.
+
+Error responses:
+
+- `500`: `{ "message": "Error fetching rooms", "error": object }`
+
+### Booking Endpoints
+
+#### 11) GET `/api/bookings/availability`
+
+Auth: Public
+
+Query params:
+
+| Param       | Type              | Required | Nullable | Notes                     |
+| ----------- | ----------------- | -------- | -------- | ------------------------- |
+| gurudwaraId | string(ObjectId)  | Yes      | No       |                           |
+| date        | string(date-time) | Yes      | No       | Any parseable date string |
+
+Request body: None
+
+Success response (`200`):
+
+| Field          | Type   | Nullable | Notes                    |
+| -------------- | ------ | -------- | ------------------------ |
+| availableRooms | number | No       | Count for selected date  |
+| allRooms       | number | No       | Total rooms in gurudwara |
+
+Error responses:
+
+- `400`: `{ "message": "gurudwaraId and date are required" }` or `{ "message": "Invalid date" }`
+- `500`: `{ "message": "Internal server error" }`
+
+#### 12) POST `/api/bookings/create`
+
+Auth: Required
+
+Request body:
+
+| Field        | Type              | Required | Nullable | Notes                     |
+| ------------ | ----------------- | -------- | -------- | ------------------------- |
+| gurudwaraId  | string(ObjectId)  | Yes      | No       |                           |
+| members      | number            | Yes      | No       | Must fit room capacity    |
+| checkInDate  | string(date-time) | Yes      | No       |                           |
+| checkOutDate | string(date-time) | Yes      | No       | Must be after checkInDate |
+
+Success response (`201`):
+
+| Field   | Type   | Nullable | Notes                          |
+| ------- | ------ | -------- | ------------------------------ |
+| message | string | No       | `Booking created successfully` |
+| booking | object | No       | Booking document               |
+
+`booking` fields:
+
+| Field              | Type              | Nullable | Notes                          |
+| ------------------ | ----------------- | -------- | ------------------------------ |
+| \_id               | string(ObjectId)  | No       |                                |
+| user               | string(ObjectId)  | No       |                                |
+| room               | string(ObjectId)  | No       |                                |
+| gurudwara          | string(ObjectId)  | No       |                                |
+| groupName          | string            | Omitted  | Single booking does not set it |
+| groupSize          | number            | Omitted  | Single booking does not set it |
+| isGroupBooking     | boolean           | No       | Defaults to `false`            |
+| members            | number            | No       |                                |
+| checkInDate        | string(date-time) | No       |                                |
+| checkOutDate       | string(date-time) | No       |                                |
+| actualCheckOutTime | string(date-time) | Omitted  | Set on checkout                |
+| bookingStatus      | string            | No       | Default `confirmed`            |
+| checkInStatus      | boolean           | No       | Default `false`                |
+| checkInTime        | string(date-time) | Omitted  | Set on check-in                |
+| qrToken            | string            | No       | Generated random hex string    |
+| createdAt          | string(date-time) | No       |                                |
+| updatedAt          | string(date-time) | No       |                                |
+| \_\_v              | number            | No       |                                |
+
+Error responses:
+
+- `400`: validation/business-rule errors:
+  - `gurudwaraId, members, checkInDate and checkOutDate are required`
+  - `Invalid check-in or check-out date`
+  - `Check-out must be after check-in`
+  - `You already have a booking for this date at this Gurudwara.`
+  - `Family already booked room for this date`
+  - `No rooms available for the selected date.`
+- `401`: auth errors
+- `404`: `{ "message": "Gurudwara not found" }`
+- `500`: `{ "message": "Internal server error" }`
+
+#### 13) POST `/api/bookings/group`
+
+Auth: Required
+
+Request body:
+
+| Field        | Type              | Required | Nullable | Notes                     |
+| ------------ | ----------------- | -------- | -------- | ------------------------- |
+| gurudwaraId  | string(ObjectId)  | Yes      | No       |                           |
+| groupName    | string            | Yes      | No       |                           |
+| groupSize    | number            | Yes      | No       | Number of guests          |
+| checkInDate  | string(date-time) | Yes      | No       |                           |
+| checkOutDate | string(date-time) | Yes      | No       | Must be after checkInDate |
+
+Success response (`201`):
+
+| Field          | Type   | Nullable | Notes                         |
+| -------------- | ------ | -------- | ----------------------------- |
+| message        | string | No       | `Group Booking Successful`    |
+| roomsAllocated | number | No       | Count of created booking docs |
+
+Error responses:
+
+- `400`: request/validation errors including `Not enough rooms`
+- `401`: auth errors
+- `500`: `{ "message": "<runtime error message>" }`
+
+#### 14) PUT `/api/bookings/cancel/:bookingId`
+
+Auth: Required
+
+Path params:
+
+| Param     | Type             | Required | Nullable | Notes                         |
+| --------- | ---------------- | -------- | -------- | ----------------------------- |
+| bookingId | string(ObjectId) | Yes      | No       | Must belong to logged-in user |
+
+Request body: None
+
+Success response (`200`):
+
+| Field   | Type   | Nullable | Notes                            |
+| ------- | ------ | -------- | -------------------------------- |
+| message | string | No       | `Booking cancelled successfully` |
+
+Error responses:
+
+- `400`: `{ "message": "Cannot cancel a checked-in booking" }`
+- `401`: auth errors
+- `404`: `{ "message": "Booking not found" }`
+- `500`: `{ "message": "Internal server error" }`
+
+#### 15) POST `/api/bookings/checkin`
+
+Auth: Required + Admin only
+
+Request body:
+
+| Field   | Type   | Required | Nullable | Notes            |
+| ------- | ------ | -------- | -------- | ---------------- |
+| qrToken | string | Yes      | No       | Booking QR token |
+
+Success response (`200`):
+
+| Field   | Type   | Nullable | Notes                                         |
+| ------- | ------ | -------- | --------------------------------------------- |
+| message | string | No       | `Check-in successful`                         |
+| booking | object | No       | Booking document populated with `room` object |
+
+`booking` fields are same as endpoint 12, except `room` is a populated Room object.
+
+Error responses:
+
+- `401`: auth errors
+- `403`: `{ "message": "Forbidden: Admins only" }`
+- `404`: `{ "message": "Booking not found" }`
+- `500`: `{ "message": "Internal server error" }`
+
+#### 16) PUT `/api/bookings/checkout/:bookingId`
+
+Auth: Required + Admin only
+
+Path params:
+
+| Param     | Type             | Required | Nullable | Notes               |
+| --------- | ---------------- | -------- | -------- | ------------------- |
+| bookingId | string(ObjectId) | Yes      | No       | Existing booking id |
+
+Request body: None
+
+Success response (`200`):
+
+| Field   | Type   | Nullable | Notes                   |
+| ------- | ------ | -------- | ----------------------- |
+| message | string | No       | `Checkout successful`   |
+| room    | string | No       | Checked out room number |
+
+Error responses:
+
+- `400`: `{ "message": "Cannot checkout before check-in" }`
+- `401`: auth errors
+- `403`: `{ "message": "Forbidden: Admins only" }`
+- `404`: `{ "message": "Booking not found" }`
+- `500`: `{ "message": "<runtime error message>" }`
+
+#### 17) GET `/api/bookings/admin/occupancy`
+
+Auth: Required + Admin only
+
+Query params:
+
+| Param       | Type             | Required | Nullable | Notes |
+| ----------- | ---------------- | -------- | -------- | ----- |
+| gurudwaraId | string(ObjectId) | Yes      | No       |       |
+
+Request body: None
+
+Success response (`200`):
+
+| Field          | Type   | Nullable | Notes                           |
+| -------------- | ------ | -------- | ------------------------------- |
+| totalRooms     | number | No       |                                 |
+| bookedToday    | number | No       | `confirmed` bookings for today  |
+| availableRooms | number | No       | `totalRooms - bookedToday`      |
+| checkedInToday | number | No       | `checked-in` bookings for today |
+
+Error responses:
+
+- `400`: `{ "message": "gurudwaraId is required" }`
+- `401`: auth errors
+- `403`: `{ "message": "Forbidden: Admins only" }`
+- `500`: `{ "message": "<runtime error message>" }`
+
+### Revenue Endpoint
+
+#### 18) GET `/revenue`
+
+Auth: Required + Admin only
+
+Query params:
+
+| Param       | Type              | Required | Nullable | Notes                                                |
+| ----------- | ----------------- | -------- | -------- | ---------------------------------------------------- |
+| gurudwaraId | string(ObjectId)  | Yes      | No       |                                                      |
+| date        | string(date-time) | Yes      | No       | Parsed as Date and matched directly to `checkInDate` |
+
+Request body: None
+
+Success response (`200`):
+
+| Field         | Type   | Nullable | Notes                                      |
+| ------------- | ------ | -------- | ------------------------------------------ |
+| totalBookings | number | No       | Bookings count for selected date           |
+| totalRevenue  | number | No       | `500` per booking where room `type = paid` |
+
+Error responses:
+
+- `400`: `{ "message": "gurudwaraId and date are required" }` or `{ "message": "Invalid date" }`
+- `401`: auth errors
+- `403`: `{ "message": "Forbidden: Admins only" }`
+- `500`: `{ "message": "<runtime error message>" }`
 
 ## Booking Flow
 
