@@ -10,6 +10,8 @@ const createTransporter = () => {
 
   return nodemailer.createTransport({
     service: "gmail",
+    port: 587,
+    secure: false,
     auth: {
       user: emailUser,
       pass: emailPass,

@@ -71,6 +71,7 @@ export const loginUser = async (req, res) => {
         }
         res.status(200).cookie("token", generateToken(user._id), {
             httpOnly: true,
+            sameSite:"lax",
             secure: process.env.NODE_ENV === "production",
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         }).json({
@@ -95,6 +96,7 @@ export const logoutUser = async (req, res) => {
       .clearCookie("token", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
+        sameSite:"lax"
       })
       .json({ message: "Logged out successfully" });
   } catch (error) {
@@ -119,6 +121,7 @@ export const forgotPassword=async(req,res)=>{
     }
 
     const otp = genrateOtp();
+    console.log("Generated OTP:", otp); // Log the generated OTP for debugging
     user.otp = otp;
     user.otpExpires = Date.now() + 5 * 60 * 1000; // 5 minutes
     await user.save();
