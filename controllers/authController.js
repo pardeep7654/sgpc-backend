@@ -18,6 +18,7 @@ const genrateOtp = () => {
 export const registerUser = async (req, res) => {
   try {
     const { name,email ,mobile, age, Adhaar, password } = req.body;
+    // console.log("Received registration data:", { name, email, mobile, age, Adhaar, password }); // Log the received data for debugging
     if (!name || !mobile || !age || !Adhaar || !password ||!email) {
       return res.status(400).json({ message: "Please fill all fields" });
     }
@@ -105,7 +106,9 @@ export const logoutUser = async (req, res) => {
 };
 
 export const forgotPassword=async(req,res)=>{
+
   try {
+    // console.log(req.body);
     const { email } = req.body;
 
     if (!email) {
@@ -148,6 +151,7 @@ export const resetPassword = async (req, res) => {
         message: "Email, OTP and new password are required"
       });
     }
+    // console.log("Ds");
 
     const user = await User.findOne({
       email,
@@ -155,6 +159,7 @@ export const resetPassword = async (req, res) => {
       otpExpires: { $gt: Date.now() }
     });
 
+    // console.log("User found for password reset:", user); // Log the user found for debugging
     if (!user) {
       return res.status(400).json({
         message: "User Not Found Or Invalid Otp"
@@ -182,8 +187,5 @@ export const resetPassword = async (req, res) => {
 
 export const getUser = async (req, res, next) => {
   const user = req.user;
-  res.status(200).json({
-    success: true,
-    user,
-  });
-}
+  res.status(200).json(user);
+};

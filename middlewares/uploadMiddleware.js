@@ -31,3 +31,17 @@ export const uploadRoomImages = (req, res, next) => {
         return res.status(400).json({ message: error.message || "Image upload failed" });
     });
 };
+
+export const uploadGurudwaraImages = (req, res, next) => {
+    upload.array("images", 5)(req, res, (error) => {
+        if (!error) {
+            return next();
+        }
+
+        if (error instanceof multer.MulterError) {
+            return res.status(400).json({ message: error.message });
+        }
+
+        return res.status(400).json({ message: error.message || "Image upload failed" });
+    });
+};

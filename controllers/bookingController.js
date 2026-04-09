@@ -140,6 +140,19 @@ export const createBooking = async (req, res) => {
   }
 };
 
+export const getBookingDetails = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const bookings = await Booking.find({ user: userId })
+      .populate("room")
+      .populate("gurudwara");
+    res.status(200).json({ bookings });
+  } catch (error) {
+    console.error("Error fetching booking details:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 export const createGroupBooking = async (req, res) => {
   try {
     const { gurudwaraId, groupName, groupSize, checkInDate, checkOutDate } = req.body;
@@ -228,8 +241,9 @@ export const createGroupBooking = async (req, res) => {
 
 export const checkInBooking = async (req, res) => {
   try {
-    const { qrToken } = req.body;
+    const { qrToken ,bookingId} = req.body;
     const booking = await Booking.findOne({
+        _id: bookingId,
       qrToken,
       bookingStatus: "confirmed",
     }).populate("room");
@@ -273,9 +287,6 @@ export const cancelBooking = async (req, res) => {
 export const getOccupancyDetails = async (req, res) => {
   try {
     const { gurudwaraId } = req.query;
-    if (!gurudwaraId) {
-      return res.status(400).json({ message: "gurudwaraId is required" });
-    }
 
     const today = new Date();
     const startOfDay = new Date(today);
@@ -283,14 +294,17 @@ export const getOccupancyDetails = async (req, res) => {
     const endOfDay = new Date(today);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const totalRooms = await Room.countDocuments({ Gurudwara: gurudwaraId });
+    const roomFilter = gurudwaraId ? { Gurudwara: gurudwaraId } : {};
+    const bookingFilter = gurudwaraId ? { gurudwara: gurudwaraId } : {};
+
+    const totalRooms = await Room.countDocuments(roomFilter);
     const bookedToday = await Booking.countDocuments({
-      gurudwara: gurudwaraId,
+      ...bookingFilter,
       checkInDate: { $gte: startOfDay, $lte: endOfDay },
       bookingStatus: "confirmed",
     });
     const checkedInToday = await Booking.countDocuments({
-      gurudwara: gurudwaraId,
+      ...bookingFilter,
       checkInDate: { $gte: startOfDay, $lte: endOfDay },
       bookingStatus: "checked-in",
     });

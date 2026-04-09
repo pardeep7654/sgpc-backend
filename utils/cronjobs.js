@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import {Booking} from '../models/BookingModel.js';
+import {User} from '../models/UserModel.js';
 
 const cronjobs=()=>{
     cron.schedule("*/30 * * * *",async()=>{
@@ -13,9 +14,28 @@ const cronjobs=()=>{
             booking.bookingStatus="cancelled"
             await booking.save();
         }
-        console.log("Expired booking canceled");
+        // console.log("Expired booking canceled");
 
-    })
+    });
+
+    cron.schedule("* * * * *", async () => {
+        const now = new Date();
+
+        await User.updateMany(
+            {
+                otp: { $ne: null },
+                otpExpires: { $lte: now }
+            },
+            {
+                $unset: {
+                    otp: 1,
+                    otpExpires: 1
+                }
+            }
+        );
+
+        // console.log("Expired OTPs cleared");
+    });
 }
 
 export default cronjobs;
