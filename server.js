@@ -1,4 +1,6 @@
 import { config } from "dotenv";
+config();
+// console.log("ENV CHECK:", process.env.CLOUDINARY_API_KEY);
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
@@ -13,9 +15,7 @@ import { authMiddleware } from "./middlewares/authMiddleware.js";
 import { adminOnly } from "./middlewares/adminMiddleware.js";
 import { Booking } from "./models/BookingModel.js";
 
-config({
-    path: "./.env"
-});
+ 
 
 const app = express();
 

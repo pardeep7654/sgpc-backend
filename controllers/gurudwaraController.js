@@ -8,6 +8,7 @@ export const createGurudwara = async (req, res) => {
 
         const uploadedImages = await Promise.all(
             imageFiles.map((file) =>
+                
                 uploadBufferToCloudinary(file.buffer, {
                     folder: "gurudwaras"
                 })
