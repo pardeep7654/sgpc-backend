@@ -10,8 +10,9 @@ export const addRoom = async (req, res) => {
         if (!gurudwara) {
             return res.status(404).json({ message: "Gurudwara not found" });
         }
-
+        
         const imageFiles = req.files || [];
+        
         const uploadedImages = await Promise.all(
             imageFiles.map((file) =>
                 uploadBufferToCloudinary(file.buffer, {
@@ -31,11 +32,47 @@ export const addRoom = async (req, res) => {
                 public_id: image.public_id
             }))
         });
+        
+        
         const savedRoom = await newRoom.save();
         await Gurudwara.findByIdAndUpdate(gurudwaraId, { $inc: { totalRooms: 1 } });
         res.status(201).json(savedRoom);
     } catch (error) {
         res.status(500).json({ message: "Error adding room", error: error.message });
+    }
+};
+
+export const addMultipleRooms = async (req, res) => {
+    try {
+        const { gurudwaraId, blockName, capacity, type, numberOfRooms ,image } = req.body;
+         
+        const gurudwara = await Gurudwara.findById(gurudwaraId);
+        if (!gurudwara) {
+            return res.status(404).json({ message: "Gurudwara not found" });
+        }
+       
+        const newRooms = [];
+        for (let i = 0; i < numberOfRooms; i++) {
+            
+            const roomNumber = `${blockName[0]}-${i+1}`;
+            newRooms.push({
+                Gurudwara: gurudwaraId,
+                roomNumber,
+                blockName,
+                capacity,
+                type,
+                images: image ? [{
+                    url: image.url,
+                    public_id: image.public_id
+                }] : []
+            });
+        }
+
+        const savedRooms = await Room.insertMany(newRooms);
+        await Gurudwara.findByIdAndUpdate(gurudwaraId, { $inc: { totalRooms: numberOfRooms } });
+        res.status(201).json(savedRooms);
+    } catch (error) {
+        res.status(500).json({ message: "Error adding multiple rooms", error: error.message });
     }
 };
 

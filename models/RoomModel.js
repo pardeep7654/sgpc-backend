@@ -19,7 +19,7 @@ const roomSchema = new Schema({
     images:[
         {
             url:String,
-            public_id:String
+            public_id:String,
         }
     ],
     capacity: {
@@ -28,8 +28,8 @@ const roomSchema = new Schema({
     },
     type:{
         type: String,
-        enum:["free","paid"],
-        default:"free"
+        enum:["Non-AC","AC","Deluxe AC","Hall"],
+        default:"Non-AC"
     },
     status: {
         type: String,
