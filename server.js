@@ -20,7 +20,10 @@ import { Booking } from "./models/BookingModel.js";
 const app = express();
 
 
-app.use(cors());
+app.use(cors({
+  origin: "https://sgpc-frontend-seven.vercel.app",
+  credentials: true
+}));
 app.use(express.json());
 app.use(cookieParser());
 
